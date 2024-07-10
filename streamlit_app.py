@@ -123,6 +123,9 @@ def generate_verification_code():
 make_sidebar()
 
 
+
+
+
 st.title("✨ DailyLinkai ✨")
 
 # Ensure `signup_step` is initialized
