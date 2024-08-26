@@ -73,7 +73,7 @@ def fetch_and_process_news_data():
 
 
 def main():
-    st.title("News App")
+    st.title("DailyLinkAI")
 
     with st.status("Collecting data...", expanded=True) as status:
         df_BBC = fetch_and_process_news_data()
