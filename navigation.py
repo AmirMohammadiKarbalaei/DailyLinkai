@@ -21,8 +21,8 @@ def get_current_page_name():
     return pages[ctx.page_script_hash]["page_name"]
 
 
-HORIZONTAL = "./media/DailyLinkai_horizontal.png"
-ICON = "./media/D.png"
+# HORIZONTAL = "./media/DailyLinkai_horizontal.png"
+# ICON = "./media/D.png"
 
 
 def make_sidebar():
@@ -38,7 +38,7 @@ def make_sidebar():
         None
     """
     with st.sidebar:
-        st.logo(HORIZONTAL, icon_image=ICON)
+        # st.logo(HORIZONTAL, icon_image=ICON)
         # st.image("./media/2.png",width=200)
 
         st.title(" 📰 Your News, Smarter 📰")
@@ -59,14 +59,14 @@ def make_sidebar():
             if st.button("Log out"):
                 logout()
 
-        elif get_current_page_name() != "streamlit_app":
+        elif get_current_page_name() != "Homepage.py":
             # If anyone tries to access a secret page without being logged in,
             # redirect them to the login page
-            st.switch_page("streamlit_app.py")
+            st.switch_page("Homepage.py")
 
 
 def logout():
     st.session_state.logged_in = False
     st.info("Logged out successfully!")
     sleep(0.5)
-    st.switch_page("streamlit_app.py")
+    st.switch_page("Homepage.py")
