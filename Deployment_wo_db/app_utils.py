@@ -15,6 +15,17 @@ from transformers import DPRQuestionEncoder, DPRQuestionEncoderTokenizer
 
 # Define your asynchronous function
 
+st.markdown(
+    """
+    <style>
+    .stButton > button {
+        float: right;
+    }
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
+
 
 async def fetch_url(session, url, timeout):
     """
@@ -157,7 +168,7 @@ def collect_embed_content(df):
 
     with st.spinner("Embedding news content"):
         # Initialize progress bar
-        progress_text = "Embedding content in progress. Please wait."
+        progress_text = "Embedding Articles. This may take a few minutes. Please wait."
         my_bar = st.progress(0, text=progress_text)
 
         embeddings = []

@@ -57,7 +57,7 @@ def fetch_and_process_news_data():
         #     st.write(f"Found {len(urls['sky'])} URLs from Sky News")
 
         bbc_topics_to_drop = {"pidgin", "hausa", "swahili", "naidheachdan", "cymrufyw"}
-        with st.spinner("Processing BBC news data..."):
+        with st.spinner("Processing BBC A..."):
             df_BBC = process_news_data(urls, "bbc", bbc_topics_to_drop)
 
             # st.write("Data processing complete!")
@@ -72,9 +72,25 @@ def fetch_and_process_news_data():
     return df_BBC.drop_duplicates("Title").reset_index(drop=True)
 
 
+def reset_app():
+    st.cache_data.clear()
+
+
+st.markdown(
+    """
+    <style>
+    .stButton > button {
+        float: right;
+    }
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
+
+
 def main():
     st.title("DailyLinkAI")
-
+    st.button("Download Today's Articles", on_click=reset_app, key="Resetapp")
     with st.status("Collecting data...", expanded=True) as status:
         df_BBC = fetch_and_process_news_data()
         df_BBC = (
@@ -88,10 +104,8 @@ def main():
         st.write(f"Fetched & Processed {len(df_BBC)} articles from BBC.")
         status.update(label=f"Fetched {len(df_BBC)} articles!")
         interactions = initialize_interactions()
-        st.write("embedding data...")
-
         df = collect_embed_content(df_BBC)
-        status.update(label="Download complete!", state="complete", expanded=False)
+        status.update(label="Download complete!", state="complete", expanded=True)
     streamlit_print_topic_counts(df_BBC, "Today's Topics:")
     preferences = st.multiselect(
         "What are your favorite Topics", ["news", "sport", "weather", "newsround"]
