@@ -2,3 +2,5 @@
 .streamlit/secrets.toml
 .mypy_cache/
 __pycache__/
+.ipynb
+app_w_login_wo_db/.streamlit/secrets.toml
