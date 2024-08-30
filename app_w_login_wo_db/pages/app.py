@@ -114,23 +114,25 @@ def load_interactions():
     """Load interactions from a JSON file."""
     if os.path.exists(DATA_FILE):
         with open(DATA_FILE, "r") as f:
-            return json.load(f)
+            try:
+                return json.load(f)
+            except:
+                return None
     else:
-        return {}
+        return None
 
 
 def db_embeddings():
     """Simulate retrieving articles from a 'database'."""
     # For this example, we simulate with a fixed DataFrame
-    today = date.today()
 
     try:
         # Attempt to read the CSV file
-        articles = pd.read_csv("articles.csv")
+        articles = pd.read_csv("articles.csv", index_col=0)
 
         # If the DataFrame is empty, return an empty DataFrame
         if articles.empty:
-            return pd.DataFrame()
+            return None
 
         # If there are articles, filter by today's date and return the result
         articles_df = pd.DataFrame(articles)
@@ -138,7 +140,7 @@ def db_embeddings():
 
     except pd.errors.EmptyDataError:
         # If the CSV is empty or not found, return an empty DataFrame
-        return pd.DataFrame()
+        return None
 
 
 def save_interactions(interactions):
@@ -164,11 +166,14 @@ def main():
     make_sidebar()
 
     # Load interactions from file
-    st.session_state.interactions = load_interactions()
-    user_interactions = st.session_state.interactions[st.session_state["user_email"]]
+    loaded_inter = load_interactions()
+    if loaded_inter is not None:
+        st.session_state.interactions = loaded_inter
+        st.session_state.all_time_current_user_interactions = (
+            st.session_state.interactions[st.session_state["user_email"]]
+        )
 
-    if "interactions" not in st.session_state:
-        st.session_state["interactions"] = initialize_interactions()
+    st.session_state.session_user_interactions = initialize_interactions()
 
     st.title("✨ DailyLinkai ✨ ")
     st.button("Download Today's Articles", on_click=reset_app, key="Resetapp")
@@ -183,14 +188,22 @@ def main():
             .drop_duplicates(subset="Title")
             .reset_index(drop=True)
         )
-        df = db_embeddings()
         todays_atricles = collect_embed_content(df_BBC)
-        df = pd.concat([df, todays_atricles], ignore_index=True)
-        df.to_csv("articles.csv", index=True)
+        today = date.today()
+        todays_atricles["date"] = today
+        db = db_embeddings()
+        if db is None:
+            todays_atricles.to_csv("articles.csv")
+        else:
+            df = pd.concat([db, todays_atricles]).reset_index(drop=True)
+            df.to_csv("articles.csv")
+
         status.update(label="Download complete!", state="complete", expanded=False)
     st.write("Today's Topics:")
     streamlit_print_topic_counts(todays_atricles, "BBC")
-    preferences = st.multiselect("What are your favorite Topics", df.topic.unique())
+    preferences = st.multiselect(
+        "What are your favorite Topics", todays_atricles.topic.unique()
+    )
     selected_topic = st.radio(
         "Select a topic to show:", list(preferences), horizontal=True
     )
@@ -200,7 +213,6 @@ def main():
         st.subheader("Please choose your preferences")
 
     selected_news = todays_atricles[todays_atricles["topic"] == selected_topic]
-    st.write(user_interactions)
     for index, row in selected_news.iterrows():
         st.markdown(
             f"""
@@ -215,13 +227,20 @@ def main():
         col1, col2 = st.columns(2)
         with col1:
             if st.button("👍 Upvote", key=f"upvote_{index}"):
-                track_interaction(user_interactions, index, "Upvoted")
+                track_interaction(
+                    st.session_state.session_user_interactions, index, "Upvoted"
+                )
         with col2:
             if st.button("👎 Downvote", key=f"downvote_{index}"):
-                track_interaction(user_interactions, index, "Downvoted")
-
+                track_interaction(
+                    st.session_state.session_user_interactions, index, "Downvoted"
+                )
+    st.write(st.session_state.session_user_interactions[st.session_state.user_email])
     # most_upvoted = sorted(user_interactions["liked"], reverse=True)
-    counter = Counter(user_interactions["liked"])
+
+    # counter = Counter(
+    #     st.session_state.session_user_interactions[st.session_state.user_email]["liked"]
+    # )
 
     embeddings = [np.array(i) for i in todays_atricles.embedding]
     embeddings_np = np.array(embeddings)
@@ -245,14 +264,39 @@ def main():
     D, I = index.search(embeddings_np, k=k)
     other_topics_printed, Suggestions = True, True
     reset_sidebar()
-    if len(user_interactions["liked"]) >= 3 or len(user_interactions["disliked"]) >= 3:
-        st.session_state.interactions[st.session_state.user_email] = user_interactions
-        save_interactions(st.session_state.interactions)
-    for news_id, counts in counter.most_common():
-        if counts <= 0:
-            continue
-
+    if (
+        len(
+            st.session_state.session_user_interactions[st.session_state.user_email][
+                "liked"
+            ]
+        )
+        >= 3
+        or len(
+            st.session_state.session_user_interactions[st.session_state.user_email][
+                "disliked"
+            ]
+        )
+        >= 3
+    ):
+        if loaded_inter is not None:
+            st.session_state.interactions[st.session_state.user_email]["liked"] += (
+                st.session_state.session_user_interactions[
+                    st.session_state.user_email
+                ]["liked"]
+            )
+            st.session_state.interactions[st.session_state.user_email]["disliked"] += (
+                st.session_state.session_user_interactions[
+                    st.session_state.user_email
+                ]["liked"]
+            )
+            save_interactions(st.session_state.interactions)
+        else:
+            save_interactions(st.session_state.session_user_interactions)
+    for news_id in st.session_state.session_user_interactions[
+        st.session_state.user_email
+    ]["liked"]:
         for i in range(1, k):
+            # if news_id < len(todays_atricles):
             news_row = todays_atricles.iloc[I[news_id][i]]
 
             if news_row.topic in preferences:
@@ -261,7 +305,8 @@ def main():
                     Suggestions = False
 
                 st.sidebar.markdown(
-                    title_style.format(title=news_row["title"]), unsafe_allow_html=True
+                    title_style.format(title=news_row["title"]),
+                    unsafe_allow_html=True,
                 )
                 st.sidebar.markdown(
                     link_style.format(url=news_row["url"]), unsafe_allow_html=True
@@ -272,11 +317,14 @@ def main():
                     other_topics_printed = False
 
                 st.sidebar.markdown(
-                    title_style.format(title=news_row["title"]), unsafe_allow_html=True
+                    title_style.format(title=news_row["title"]),
+                    unsafe_allow_html=True,
                 )
                 st.sidebar.markdown(
                     link_style.format(url=news_row["url"]), unsafe_allow_html=True
                 )
+            # else:
+            #     continue
 
     # if st.session_state.get("user_email"):
     #     email = st.session_state["user_email"]

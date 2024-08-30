@@ -235,15 +235,15 @@ def initialize_interactions():
     Returns:
         dict: A dictionary where each key is a news article ID and each value is another dictionary containing 'upvotes' and 'downvotes' counts.
     """
-    return defaultdict(lambda: {"upvotes": 0, "downvotes": 0})
+    return {st.session_state.user_email: {"liked": [], "disliked": []}}
 
 
 # Function to track interactions
 def track_interaction(interactions, news_id, action):
     if action == "Upvoted":
-        interactions["liked"].append(news_id)
+        interactions[st.session_state.user_email]["liked"].append(news_id)
     elif action == "Downvoted":
-        interactions["disliked"].append(news_id)
+        interactions[st.session_state.user_email]["disliked"].append(news_id)
     print(f"User interacted with news article {news_id} - {action}")
 
 

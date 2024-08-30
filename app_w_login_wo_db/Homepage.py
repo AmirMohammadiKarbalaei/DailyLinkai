@@ -83,7 +83,7 @@ def check_password(stored_password, provided_password):
     try:
         ph.verify(stored_password, provided_password)
         return True
-    except ValueError:
+    except:
         return False
 
 
