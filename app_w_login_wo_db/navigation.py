@@ -1,6 +1,7 @@
 from time import sleep
 
 import streamlit as st
+from app_utils import save_interactions
 from streamlit.runtime.scriptrunner import get_script_run_ctx
 from streamlit.source_util import get_pages
 
@@ -66,6 +67,7 @@ def make_sidebar():
 
 
 def logout():
+    save_interactions(st.session_state.interactions)
     st.session_state.logged_in = False
     st.info("Logged out successfully!")
     sleep(0.5)
