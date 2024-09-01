@@ -133,10 +133,11 @@ def main():
             start = 0
             end = len(todays_atricles)
         else:
-            db.drop_duplicates(inplace=True).reset_index(drop=True)
+            db = db.drop_duplicates().reset_index(drop=True)
             start = len(db) + 1
             end = len(db) + len(todays_atricles)
-            df = pd.concat([db, todays_atricles]).drop_duplicates.reset_index(drop=True)
+            df = pd.concat([db, todays_atricles])
+            df = df.drop_duplicates(subset="title").reset_index(drop=True)
             df.to_csv("files/articles.csv")
 
         status.update(label="Download complete!", state="complete", expanded=False)
@@ -194,10 +195,11 @@ def main():
     if loaded_inter is not None:
         if user_email in loaded_inter.keys():
             loaded_inter[user_email]["liked"] += [
-                x + start for x in st.session_state.session_user_interactions["liked"]
+                todays_atricles.title[x]
+                for x in st.session_state.session_user_interactions["liked"]
             ]
             loaded_inter[user_email]["disliked"] += [
-                x + start
+                todays_atricles.title[x]
                 for x in st.session_state.session_user_interactions["disliked"]
             ]
         else:
