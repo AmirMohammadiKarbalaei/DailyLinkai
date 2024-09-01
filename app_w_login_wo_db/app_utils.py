@@ -1,9 +1,11 @@
 import asyncio
+import json
 import logging
+import os
 import pickle
-from collections import defaultdict
 
 import aiohttp
+import langid
 import numpy as np
 import pandas as pd
 import streamlit as st
@@ -235,15 +237,26 @@ def initialize_interactions():
     Returns:
         dict: A dictionary where each key is a news article ID and each value is another dictionary containing 'upvotes' and 'downvotes' counts.
     """
-    return {st.session_state.user_email: {"liked": [], "disliked": []}}
+    return {"liked": [], "disliked": []}
 
 
 # Function to track interactions
 def track_interaction(interactions, news_id, action):
+    """
+    Tracks a user's interaction with a news article.
+
+    Args:
+        interactions (dict): A dictionary of news article interactions, where each key is a news article ID and each value is another dictionary containing 'upvotes' and 'downvotes' counts.
+        news_id (str): The ID of the news article being interacted with.
+        action (str): The type of interaction, either 'Upvoted' or 'Downvoted'.
+
+    Returns:
+        None
+    """
     if action == "Upvoted":
-        interactions[st.session_state.user_email]["liked"].append(news_id)
+        interactions["liked"].append(news_id)
     elif action == "Downvoted":
-        interactions[st.session_state.user_email]["disliked"].append(news_id)
+        interactions["disliked"].append(news_id)
     print(f"User interacted with news article {news_id} - {action}")
 
 
@@ -269,5 +282,122 @@ st.cache_resource
 
 
 async def articles(urls, timeout=20):
+    """
+    Asynchronously extracts article content from a list of URLs.
+
+    Args:
+        urls (pd.DataFrame): A DataFrame containing the URLs to extract content from.
+        timeout (int, optional): The timeout value in seconds for each URL request. Defaults to 20.
+
+    Returns:
+        pd.DataFrame: A DataFrame containing the extracted article content, including the URL, topic, title, and content.
+    """
+
     articles = await request_sentences_from_urls_async_app(urls, timeout)
     return articles
+
+
+def render_news_item(index, title, url):
+    """
+    Renders a news item with title, link, and upvote/downvote buttons.
+
+    Args:
+        index (int): The index of the news item in the list of news items.
+        title (str): The title of the news item.
+        url (str): The URL of the news item.
+
+    Returns:
+        None
+    """
+
+    st.markdown(
+        f"""
+        <div style="border: 1px solid #ddd; padding: 10px; margin-bottom: 10px; border-radius: 5px;">
+            <h4>{title}</h4>
+            <p><a href="{url}" target="_blank">Read more...</a></p>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    col1, col2 = st.columns(2)
+    with col1:
+        if st.button("👍 Upvote", key=f"upvote_{index}"):
+            track_interaction(
+                st.session_state.session_user_interactions, index, "Upvoted"
+            )
+    with col2:
+        if st.button("👎 Downvote", key=f"downvote_{index}"):
+            track_interaction(
+                st.session_state.session_user_interactions, index, "Downvoted"
+            )
+
+
+def save_interactions(interactions):
+    """Save interactions to a JSON file."""
+    with open(st.session_state.interaction_file, "w") as f:
+        json.dump(interactions, f, indent=4)
+
+
+def is_english_sentence(sentence: str):
+    """
+    This function takes a sentence as input and uses the langid
+    library to classify the language of the sentence and returns True
+    if the sentence is in english.
+    """
+    lang, confidence = langid.classify(sentence)
+    return lang == "en"
+
+
+def load_interactions():
+    """
+    Loads the user's interactions from a JSON file. If the file does not exist or
+    there is an error loading the file, it returns None. Otherwise, it returns
+    the loaded dictionary of interactions.
+    """
+    if os.path.exists(st.session_state.interaction_file):
+        with open(st.session_state.interaction_file, "r") as f:
+            try:
+                return json.load(f)
+            except:
+                return None
+    else:
+        return None
+
+
+def db_embeddings():
+    """
+    Retrieves articles from the database where the last modified date matches today's date.
+
+    Returns:
+        pd.DataFrame: A DataFrame containing the retrieved articles with columns 'id', 'date', 'title', 'url', 'topic', and 'embedding'.
+    """
+
+    try:
+        # Attempt to read the CSV file
+        articles = pd.read_csv("files/articles.csv", index_col=0)
+
+        # If the DataFrame is empty, return an empty DataFrame
+        if articles.empty:
+            return None
+
+        # If there are articles, filter by today's date and return the result
+        articles_df = pd.DataFrame(articles)
+        return articles_df  # [articles["date"] == today]
+
+    except pd.errors.EmptyDataError:
+        # If the CSV is empty or not found, return an empty DataFrame
+        return None
+
+
+def reset_sidebar():
+    """
+    Resets the state of the sidebar by setting the 'sidebar_reset' key in the session state to True.
+
+    Parameters:
+        None
+
+    Returns:
+        None
+    """
+    st.session_state.sidebar_reset = True

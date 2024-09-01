@@ -1,12 +1,12 @@
+import os
 import random
 import re
 import smtplib
 from email.mime.text import MIMEText
 from time import sleep
-import yaml
-import os
-import psycopg2
+
 import streamlit as st
+import yaml
 from argon2 import PasswordHasher
 
 from navigation import make_sidebar
@@ -14,14 +14,14 @@ from navigation import make_sidebar
 ph = PasswordHasher()
 
 
-def load_user_data(filepath="users.yaml"):
+def load_user_data(filepath="files/users.yaml"):
     if not os.path.exists(filepath):
         return {}
     with open(filepath, "r") as file:
         return yaml.safe_load(file) or {}
 
 
-def save_user_data(data, filepath="users.yaml"):
+def save_user_data(data, filepath="../files/users.yaml"):
     with open(filepath, "w") as file:
         yaml.dump(data, file)
 
@@ -83,7 +83,8 @@ def check_password(stored_password, provided_password):
     try:
         ph.verify(stored_password, provided_password)
         return True
-    except:
+    except Exception as e:
+        print(f"An error occurred during password check: {e}")
         return False
 
 
@@ -184,6 +185,17 @@ def send_verification_email(email, code):
 
 
 def save_verified_user(email, password):
+    """
+    Saves a verified user to the user database.
+
+    Args:
+        email (str): The user's email address.
+        password (str): The user's password.
+
+    Returns:
+        None
+    """
+
     users = load_user_data()
     users[email] = {"password": hash_password(password)}
     save_user_data(users)
