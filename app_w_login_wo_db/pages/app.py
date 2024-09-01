@@ -1,21 +1,18 @@
-import json
-import os
-from collections import defaultdict
 from datetime import date
-from collections import Counter
 
 import faiss
-import langid
 import nest_asyncio
 import numpy as np
 import pandas as pd
-import psycopg2
 import streamlit as st
 from app_utils import (
     collect_embed_content,
+    db_embeddings,
     initialize_interactions,
+    load_interactions,
+    render_news_item,
+    reset_sidebar,
     streamlit_print_topic_counts,
-    track_interaction,
 )
 from sitemaps_utils import Extract_todays_urls_from_sitemaps, process_news_data
 
@@ -23,7 +20,7 @@ from navigation import make_sidebar
 
 nest_asyncio.apply()
 
-DATA_FILE = "interactions.json"
+st.session_state.interaction_file = "files/interactions.json"
 
 
 @st.cache_data
@@ -100,81 +97,20 @@ st.markdown(
 )
 
 
-def is_english_sentence(sentence: str):
-    """
-    This function takes a sentence as input and uses the langid
-    library to classify the language of the sentence and returns True
-    if the sentence is in english.
-    """
-    lang, confidence = langid.classify(sentence)
-    return lang == "en"
-
-
-def load_interactions():
-    """Load interactions from a JSON file."""
-    if os.path.exists(DATA_FILE):
-        with open(DATA_FILE, "r") as f:
-            try:
-                return json.load(f)
-            except:
-                return None
-    else:
-        return None
-
-
-def db_embeddings():
-    """Simulate retrieving articles from a 'database'."""
-    # For this example, we simulate with a fixed DataFrame
-
-    try:
-        # Attempt to read the CSV file
-        articles = pd.read_csv("articles.csv", index_col=0)
-
-        # If the DataFrame is empty, return an empty DataFrame
-        if articles.empty:
-            return None
-
-        # If there are articles, filter by today's date and return the result
-        articles_df = pd.DataFrame(articles)
-        return articles_df  # [articles["date"] == today]
-
-    except pd.errors.EmptyDataError:
-        # If the CSV is empty or not found, return an empty DataFrame
-        return None
-
-
-def save_interactions(interactions):
-    """Save interactions to a JSON file."""
-    with open(DATA_FILE, "w") as f:
-        json.dump(interactions, f, indent=4)
-
-
-def reset_sidebar():
-    """
-    Resets the state of the sidebar by setting the 'sidebar_reset' key in the session state to True.
-
-    Parameters:
-        None
-
-    Returns:
-        None
-    """
-    st.session_state.sidebar_reset = True
-
-
 def main():
     make_sidebar()
 
     # Load interactions from file
     loaded_inter = load_interactions()
     if loaded_inter is not None:
-        st.session_state.interactions = loaded_inter
-        st.session_state.all_time_current_user_interactions = (
-            st.session_state.interactions[st.session_state["user_email"]]
-        )
-
-    st.session_state.session_user_interactions = initialize_interactions()
-
+        if st.session_state["user_email"] in loaded_inter:
+            st.session_state.all_time_current_user_interactions = loaded_inter[
+                st.session_state["user_email"]
+            ]
+    if "session_user_interactions" not in st.session_state:
+        st.session_state.session_user_interactions = initialize_interactions()
+    if "displayed_news" not in st.session_state:
+        st.session_state.displayed_news = 5
     st.title("✨ DailyLinkai ✨ ")
     st.button("Download Today's Articles", on_click=reset_app, key="Resetapp")
 
@@ -193,10 +129,15 @@ def main():
         todays_atricles["date"] = today
         db = db_embeddings()
         if db is None:
-            todays_atricles.to_csv("articles.csv")
+            todays_atricles.to_csv("files/articles.csv")
+            start = 0
+            end = len(todays_atricles)
         else:
-            df = pd.concat([db, todays_atricles]).reset_index(drop=True)
-            df.to_csv("articles.csv")
+            db.drop_duplicates(inplace=True).reset_index(drop=True)
+            start = len(db) + 1
+            end = len(db) + len(todays_atricles)
+            df = pd.concat([db, todays_atricles]).drop_duplicates.reset_index(drop=True)
+            df.to_csv("files/articles.csv")
 
         status.update(label="Download complete!", state="complete", expanded=False)
     st.write("Today's Topics:")
@@ -213,29 +154,12 @@ def main():
         st.subheader("Please choose your preferences")
 
     selected_news = todays_atricles[todays_atricles["topic"] == selected_topic]
-    for index, row in selected_news.iterrows():
-        st.markdown(
-            f"""
-            <div style="border: 1px solid #ddd; padding: 10px; margin-bottom: 10px; border-radius: 5px;">
-                <h4>{row['title']}</h4>
-                <p><a href="{row['url']}" target="_blank">Read more...</a></p>
-            </div>
-        """,
-            unsafe_allow_html=True,
-        )
-
-        col1, col2 = st.columns(2)
-        with col1:
-            if st.button("👍 Upvote", key=f"upvote_{index}"):
-                track_interaction(
-                    st.session_state.session_user_interactions, index, "Upvoted"
-                )
-        with col2:
-            if st.button("👎 Downvote", key=f"downvote_{index}"):
-                track_interaction(
-                    st.session_state.session_user_interactions, index, "Downvoted"
-                )
-    st.write(st.session_state.session_user_interactions[st.session_state.user_email])
+    for index, row in selected_news.head(st.session_state.displayed_news).iterrows():
+        render_news_item(index, row["title"], row["url"])
+    if st.session_state.displayed_news < len(selected_news):
+        if st.button("Load More"):
+            st.session_state.displayed_news += 5
+    st.write(st.session_state.session_user_interactions)
     # most_upvoted = sorted(user_interactions["liked"], reverse=True)
 
     # counter = Counter(
@@ -264,37 +188,26 @@ def main():
     D, I = index.search(embeddings_np, k=k)
     other_topics_printed, Suggestions = True, True
     reset_sidebar()
-    if (
-        len(
-            st.session_state.session_user_interactions[st.session_state.user_email][
-                "liked"
+
+    user_email = st.session_state.user_email
+
+    if loaded_inter is not None:
+        if user_email in loaded_inter.keys():
+            loaded_inter[user_email]["liked"] += [
+                x + start for x in st.session_state.session_user_interactions["liked"]
             ]
-        )
-        >= 3
-        or len(
-            st.session_state.session_user_interactions[st.session_state.user_email][
-                "disliked"
+            loaded_inter[user_email]["disliked"] += [
+                x + start
+                for x in st.session_state.session_user_interactions["disliked"]
             ]
-        )
-        >= 3
-    ):
-        if loaded_inter is not None:
-            st.session_state.interactions[st.session_state.user_email]["liked"] += (
-                st.session_state.session_user_interactions[
-                    st.session_state.user_email
-                ]["liked"]
-            )
-            st.session_state.interactions[st.session_state.user_email]["disliked"] += (
-                st.session_state.session_user_interactions[
-                    st.session_state.user_email
-                ]["liked"]
-            )
-            save_interactions(st.session_state.interactions)
         else:
-            save_interactions(st.session_state.session_user_interactions)
-    for news_id in st.session_state.session_user_interactions[
-        st.session_state.user_email
-    ]["liked"]:
+            loaded_inter[user_email] = st.session_state.session_user_interactions
+    else:
+        loaded_inter = st.session_state.session_user_interactions
+
+    st.session_state.interactions = loaded_inter
+
+    for news_id in st.session_state.session_user_interactions["liked"]:
         for i in range(1, k):
             # if news_id < len(todays_atricles):
             news_row = todays_atricles.iloc[I[news_id][i]]
